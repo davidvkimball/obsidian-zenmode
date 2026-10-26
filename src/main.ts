@@ -34,6 +34,15 @@ export default class ZenMode extends Plugin {
 		// Initialize zen mode tracking
 		this._wasZenMode = this.settings.zenMode;
 
+		// Zen mode does not survive a restart. It is saved as on while active,
+		// and reapplying it at startup, before the workspace has loaded, hid
+		// every tab and left a blank window. Start in the normal interface; the
+		// refresh below sees the transition and restores the sidebars.
+		if (this.settings.zenMode) {
+			this.settings.zenMode = false;
+			void this.saveSettings();
+		}
+
 		// add the settings tab
 		this.addSettingTab(new ZenModeSettingTab(this.app, this));
 		// add the toggle on/off command
@@ -122,7 +131,8 @@ export default class ZenMode extends Plugin {
 			}
 		});
 
-		this.refresh();
+		// The sidebars and tab containers only exist once the layout is ready
+		this.app.workspace.onLayoutReady(() => this.refresh());
 	}
 
 	/**
