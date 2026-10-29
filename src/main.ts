@@ -34,15 +34,6 @@ export default class ZenMode extends Plugin {
 		// Initialize zen mode tracking
 		this._wasZenMode = this.settings.zenMode;
 
-		// Zen mode does not survive a restart. It is saved as on while active,
-		// and reapplying it at startup, before the workspace has loaded, hid
-		// every tab and left a blank window. Start in the normal interface; the
-		// refresh below sees the transition and restores the sidebars.
-		if (this.settings.zenMode) {
-			this.settings.zenMode = false;
-			void this.saveSettings();
-		}
-
 		// add the settings tab
 		this.addSettingTab(new ZenModeSettingTab(this.app, this));
 		// add the toggle on/off command
@@ -132,7 +123,34 @@ export default class ZenMode extends Plugin {
 		});
 
 		// The sidebars and tab containers only exist once the layout is ready
-		this.app.workspace.onLayoutReady(() => this.refresh());
+		this.app.workspace.onLayoutReady(() => {
+			if (this.settings.zenMode) {
+				this.restoreZenMode();
+			}
+			this.refresh();
+		});
+	}
+
+	/**
+	 * Prepares the workspace for zen mode saved as on from the last session.
+	 * The layout can come back with the sidebars open or a sidebar leaf active.
+	 * Focused file mode hides every leaf but the active one, so that leaves
+	 * blank sidebars or a blank window. Collapse the sidebars and activate the
+	 * most recent leaf in the main area. The saved sidebar state from before
+	 * zen mode is kept, so exiting restores it.
+	 */
+	private restoreZenMode() {
+		const { leftSplit, rightSplit } = this.app.workspace;
+		if (leftSplit == undefined || rightSplit == undefined) {
+			return;
+		}
+		leftSplit.collapse();
+		rightSplit.collapse();
+
+		const leaf = this.app.workspace.getMostRecentLeaf();
+		if (leaf) {
+			this.app.workspace.setActiveLeaf(leaf, { focus: true });
+		}
 	}
 
 	/**
@@ -729,10 +747,12 @@ export default class ZenMode extends Plugin {
 					}
 				}
 
-				// Update zen mode state after fullscreen operation completes
+				// Update zen mode state after fullscreen operation completes.
+				// Save after the refresh so the sidebar state recorded on entry
+				// is on disk if zen mode is restored after a restart.
 				this.settings.zenMode = true;
-				await this.saveSettings();
 				this.refresh();
+				await this.saveSettings();
 			} else {
 				// Exit fullscreen first if active
 				if (document.fullscreenElement && document.exitFullscreen) {
